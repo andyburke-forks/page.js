@@ -188,11 +188,11 @@
    */
 
   function unhandled(ctx) {
-    var current = window.location.pathname + window.location.search;
+    var current = location.pathname + location.search;
     if (current == ctx.canonicalPath) return;
     page.stop();
     ctx.unhandled = true;
-    window.location = ctx.canonicalPath;
+    location = ctx.canonicalPath;
   }
 
   /**
