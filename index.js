@@ -1,8 +1,11 @@
 
   /* jshint browser:true */
+  /* jshint laxcomma:true */
+  /* jshint -W079 */ // history.location
+  /* jshint -W014 */
   /* globals require, module */
 
-  /**
+/**
    * Module dependencies.
    */
 
@@ -13,6 +16,13 @@
    */
 
   module.exports = page;
+
+  /**
+   * To work properly with the URL
+   * history.location generated polyfill in https://github.com/devote/HTML5-History-API
+   */
+
+  var location = window.history.location || window.location;
 
   /**
    * Perform initial dispatch.
@@ -31,6 +41,12 @@
    */
 
   var running;
+
+  /**
+  * HashBang option
+  */
+
+  var hashbang = false;
 
   /**
    * Register `path` with callback `fn()`,
@@ -107,8 +123,11 @@
     if (false === options.dispatch) dispatch = false;
     if (false !== options.popstate) window.addEventListener('popstate', onpopstate, false);
     if (false !== options.click) window.addEventListener('click', onclick, false);
+    if (true === options.hashbang) hashbang = true;
     if (!dispatch) return;
-    var url = location.pathname + location.search + location.hash;
+    var url = (hashbang && location.hash.indexOf('#!') === 0)
+      ? location.hash.substr(2) + location.search
+      : location.pathname + location.search + location.hash;
     page.replace(url, null, true, dispatch);
   };
 
@@ -153,8 +172,8 @@
   page.replace = function(path, state, init, dispatch){
     var ctx = new Context(path, state);
     ctx.init = init;
+    ctx.save(); // save before dispatching, which may redirect
     if (false !== dispatch) page.dispatch(ctx);
-    ctx.save();
     return ctx;
   };
 
@@ -187,9 +206,11 @@
    */
 
   function unhandled(ctx) {
+    var current = location.pathname + location.search;
+    if (current == ctx.canonicalPath) return;
     page.stop();
     ctx.unhandled = true;
-    location = ctx.canonicalPath;
+    location.href = ctx.canonicalPath;
   }
 
   /**
@@ -202,7 +223,7 @@
    */
 
   function Context(path, state) {
-    if ('/' == path[0] && 0 !== path.indexOf(base)) path = base + path;
+    if ('/' === path[0] && 0 !== path.indexOf(base)) path = base + path;
     var i = path.indexOf('?');
 
     this.canonicalPath = path;
@@ -211,8 +232,12 @@
     this.title = document.title;
     this.state = state || {};
     this.state.path = path;
-    this.querystring = ~i ? path.slice(i + 1) : '';
-    this.pathname = ~i ? path.slice(0, i) : path;
+    this.querystring = ~i
+      ? path.slice(i + 1)
+      : '';
+    this.pathname = ~i
+      ? path.slice(0, i)
+      : path;
     this.params = [];
 
     // fragment
@@ -237,7 +262,11 @@
    */
 
   Context.prototype.pushState = function(){
-    history.pushState(this.state, this.title, this.canonicalPath);
+    history.pushState(this.state
+      , this.title
+      , hashbang && this.canonicalPath !== '/'
+        ? '#!' + this.canonicalPath
+        : this.canonicalPath);
   };
 
   /**
@@ -247,7 +276,11 @@
    */
 
   Context.prototype.save = function(){
-    history.replaceState(this.state, this.title, this.canonicalPath);
+    history.replaceState(this.state
+      , this.title
+      , hashbang && this.canonicalPath !== '/'
+        ? '#!' + this.canonicalPath
+        : this.canonicalPath);
   };
 
   /**
@@ -310,7 +343,9 @@
   Route.prototype.match = function(path, params){
     var keys = this.keys,
         qsIndex = path.indexOf('?'),
-        pathname = ~qsIndex ? path.slice(0, qsIndex) : path,
+        pathname = ~qsIndex
+          ? path.slice(0, qsIndex)
+          : path,
         m = this.regexp.exec(decodeURIComponent(pathname));
 
     if (!m) return false;
@@ -318,10 +353,14 @@
     for (var i = 1, len = m.length; i < len; ++i) {
       var key = keys[i - 1];
 
-      var val = 'string' == typeof m[i] ? decodeURIComponent(m[i]) : m[i];
+      var val = 'string' == typeof m[i]
+        ? decodeURIComponent(m[i])
+        : m[i];
 
       if (key) {
-        params[key.name] = undefined !== params[key.name] ? params[key.name] : val;
+        params[key.name] = undefined !== params[key.name]
+          ? params[key.name]
+          : val;
       } else {
         params.push(val);
       }
@@ -387,7 +426,9 @@
 
   function which(e) {
     e = e || window.event;
-    return null === e.which ? e.button : e.which;
+    return null === e.which
+      ? e.button
+      : e.which;
   }
 
   /**
@@ -399,3 +440,5 @@
     if (location.port) origin += ':' + location.port;
     return (href && (0 === href.indexOf(origin)));
   }
+
+  page.sameOrigin = sameOrigin;
