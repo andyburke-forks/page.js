@@ -206,8 +206,6 @@
    */
 
   function unhandled(ctx) {
-    var current = location.pathname + location.search;
-    if (current == ctx.canonicalPath) return;
     page.stop();
     ctx.unhandled = true;
     location.href = ctx.canonicalPath;
